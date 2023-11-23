@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+import re
 
 def get_random_aneks():
     headers = {
@@ -12,7 +13,9 @@ def get_random_aneks():
     soup = BeautifulSoup(r.text, 'html.parser')
 
     anecdot = soup.find_all('div', class_="text")
+    print(type(anecdot[0]))
+    anecdot = [re.sub('<.*?>', '', '``' + str(article).replace('<br/>', '\n') + '``') for article in anecdot]
+    print(anecdot)
+    return anecdot
 
-    return [article.text.strip() for article in anecdot]
-
-#get_first_news()
+get_random_aneks()
