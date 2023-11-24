@@ -34,20 +34,24 @@ async def gacha(ctx, *arg):
     '''
     print('negr')
     global anekdotes
-    # with engine.connect() as conn:
-    #     res = conn.execute(text(f'SELECT * FROM user '))
-    #     print(res.mappings().all())
-        # if res[0].rolls_amount < 1:
-        #     await ctx.reply('Not enough rolls on account')
-        #     return
-        # else:
-        #     conn.execute(text(f'UPDATE user SET rolls_amount = {res[0].rolls_amount - 1} WHERE discord_id = {ctx.author.id}'))
+    with engine.connect() as conn:
+        rolls = 0
+        for i in conn.execute(text(f'SELECT rolls_amount FROM user WHERE discord_id = {ctx.author.id}')):
+            rolls = i[0]
+        print(rolls)
+        if rolls < 1:
+            await ctx.reply('Not enough rolls on account')
+            return
+        else:
+            conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - 1} WHERE discord_id = {ctx.author.id}'))
+            conn.commit()
+            await ctx.reply(f'Rolls remain: {rolls - 1}')
     odds_dict = {key: value["chance"] for key, value in gacha_conf.items()}
     odds = list(reversed(list(odds_dict.items())))
     cumulative_chance = 0
     result = random.random()    
     
-    print(odds_dict.items())
+    # print(odds_dict.items())
     for key, chance in odds:
         print(f'key={key}, chance={chance}')
         cumulative_chance += chance
@@ -78,7 +82,8 @@ async def link(ctx, *arg):
         user = arg[0]
     with engine.connect() as conn:
         discord_id = ctx.author.id
-        conn.execute(text(f'INSERT INTO user (discord_id, osu_id, rolls_amount, rolls_done) VALUES ({discord_id}, {user}, 0, 0)'))
+        conn.execute(text(f'INSERT INTO user (discord_id, osu_id, rolls_amount, rolls_done) VALUES ({discord_id}, {user}, 10, 0)'))
+        conn.commit()
         await ctx.reply(f"Succesfully linked {arg[0]} profile")
     
 @bot.command()
