@@ -11,7 +11,7 @@ from anek_parser import get_random_aneks
 
 with open('token.txt') as f:
     tokens = f.readline().split(', ')
-    print(tokens)
+    # print(tokens)
 config = {
     'token': tokens[0],
     'prefix': '=',
@@ -32,20 +32,25 @@ async def gacha(ctx, *arg):
     '''
     Defines the reward based on gacha.json odds. Currently don't cosumes the amount of users tries
     '''
+    message = ''
     print('negr')
     global anekdotes
     with engine.connect() as conn:
-        rolls = 0
-        for i in conn.execute(text(f'SELECT rolls_amount FROM user WHERE discord_id = {ctx.author.id}')):
+        rolls =[]
+        rolls_done = []
+        for i in conn.execute(text(f'SELECT rolls_amount, rolls_done FROM user WHERE discord_id = {ctx.author.id}')):
             rolls = i[0]
-        print(rolls)
+            rolls_done = i[1]
+        if not rolls:
+            await ctx.reply('Link your account first! Command: `=link <osu name/id>`')
+            return
         if rolls < 1:
             await ctx.reply('Not enough rolls on account')
             return
         else:
-            conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - 1} WHERE discord_id = {ctx.author.id}'))
+            conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - 1}, rolls_done = {rolls_done + 1} WHERE discord_id = {ctx.author.id}'))
             conn.commit()
-            await ctx.reply(f'Rolls remain: {rolls - 1}')
+            message = f'Rolls remain: {rolls - 1}'
     odds_dict = {key: value["chance"] for key, value in gacha_conf.items()}
     odds = list(reversed(list(odds_dict.items())))
     cumulative_chance = 0
@@ -61,7 +66,7 @@ async def gacha(ctx, *arg):
                 if not anekdotes:
                     anekdotes = get_random_aneks()
                 reward += '\n' + anekdotes.pop(0)
-            await ctx.reply(key + ':\n' + reward)
+            await ctx.reply(message + '\n' + key + ':\n' + reward)
             return
         
     await ctx.reply('how')
@@ -82,9 +87,17 @@ async def link(ctx, *arg):
         user = arg[0]
     with engine.connect() as conn:
         discord_id = ctx.author.id
-        conn.execute(text(f'INSERT INTO user (discord_id, osu_id, rolls_amount, rolls_done) VALUES ({discord_id}, {user}, 10, 0)'))
-        conn.commit()
-        await ctx.reply(f"Succesfully linked {arg[0]} profile")
+        is_in = False
+        for i in conn.execute(text(f'SELECT * FROM user WHERE discord_id = {discord_id}')):
+            is_in = i
+        if not is_in:
+            conn.execute(text(f'INSERT INTO user (discord_id, osu_id, rolls_amount, rolls_done) VALUES ({discord_id}, {user}, 10, 0)'))
+            conn.commit()
+            await ctx.reply(f"Succesfully linked {arg[0]} profile")
+        else:
+            conn.execute(text(f'UPDATE user SET osu_id = {user} WHERE discord_id = {ctx.author.id}'))
+            conn.commit()
+            await ctx.reply(f"Succesfully re-linked with {arg[0]} profile")
     
 @bot.command()
 async def osu(ctx, *arg):
