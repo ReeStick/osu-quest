@@ -7,7 +7,7 @@ import sqlalchemy
 from sqlalchemy import text
 import init_db
 from anek_parser import get_random_aneks
-
+import asyncio
 
 with open('token.txt') as f:
     tokens = f.readline().split(', ')
@@ -26,55 +26,83 @@ init_db.init_db()
 anekdotes = []
 bot = commands.Bot(command_prefix=config['prefix'],intents=intents)
 
-
-@bot.command()
-async def gacha(ctx, *arg):
-    '''
-    Defines the reward based on gacha.json odds. Currently don't cosumes the amount of users tries
-    '''
+def gacha_rolls(discord_id, roll_count=1) -> list[str]:
     message = ''
     print('negr')
     global anekdotes
     with engine.connect() as conn:
         rolls =[]
         rolls_done = []
-        for i in conn.execute(text(f'SELECT rolls_amount, rolls_done FROM user WHERE discord_id = {ctx.author.id}')):
+        for i in conn.execute(text(f'SELECT rolls_amount, rolls_done FROM user WHERE discord_id = {discord_id}')):
             rolls = i[0]
             rolls_done = i[1]
         if not rolls:
-            await ctx.reply('Link your account first! Command: `=link <osu name/id>`')
-            return
-        if rolls < 1:
-            await ctx.reply('Not enough rolls on account')
-            return
+            return 'Link your account first! Command: `=link <osu name/id>`'
+        if rolls < roll_count:
+            return f'Not enough rolls on account. Current amount: {rolls}'
         else:
-            conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - 1}, rolls_done = {rolls_done + 1} WHERE discord_id = {ctx.author.id}'))
+            conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - roll_count}, rolls_done = {rolls_done + roll_count} WHERE discord_id = {discord_id}'))
             conn.commit()
-            message = f'Rolls remain: {rolls - 1}'
+            message = f'Rolls remain: {rolls - roll_count}'
     odds_dict = {key: value["chance"] for key, value in gacha_conf.items()}
     odds = list(reversed(list(odds_dict.items())))
-    cumulative_chance = 0
-    result = random.random()    
-    
-    # print(odds_dict.items())
-    for key, chance in odds:
-        print(f'key={key}, chance={chance}')
-        cumulative_chance += chance
-        if result < cumulative_chance:
-            reward = random.choice(gacha_conf[key]['variants'])
-            if reward == 'Анекдоты':
-                if not anekdotes:
-                    anekdotes = get_random_aneks()
-                reward += '\n' + anekdotes.pop(0)
-            await ctx.reply(message + '\n' + key + ':\n' + reward)
-            return
-        
-    await ctx.reply('how')
+    rewards_list = []
+    rewards = message
+    for roll_num in range(roll_count):
+        cumulative_chance = 0
+        result = random.random()    
+        reward = ''
+        # print(odds_dict.items())
+        for key, chance in odds:
+            # print(f'key={key}, chance={chance}')
+            cumulative_chance += chance
+            if result < cumulative_chance:
+                reward = random.choice(gacha_conf[key]['variants'])
+                if reward == 'Анекдоты':
+                    if not anekdotes:
+                        anekdotes = get_random_aneks()
+                    reward += '\n' + anekdotes.pop(0)
+                reward = str(roll_num+1) + ' - ' + key + ':\n' + reward
+                print(reward + 'length:', len(reward))
+                if len(rewards + reward) >= 2000:
+                    print('sum of len: ', len(rewards))
+                    rewards_list.append(rewards)
+                    rewards = ''
+                rewards += '\n' + reward
+    rewards_list.append(rewards)
+    print(rewards_list)
+    return rewards_list
+
+@bot.command()
+async def gacha(ctx, *arg):
+    '''
+    Defines the reward based on gacha.json odds.
+    '''
+    for i in gacha_rolls(ctx.author.id):
+        if i:
+            await ctx.reply(i)
     
 @bot.command()
-async def dump(ctx, *arg):
-    init_db.dump()
-    await ctx.reply('dumped')
+async def roll_10(ctx, *arg):
+    '''
+    Same as gacha(ctx, *arg), but do 10 rolls at the time. Returns multiple messages bcs of discord symbol limit
+    '''
+    for i in gacha_rolls(ctx.author.id, roll_count=10):
+        if i:
+            await ctx.reply(i)
+            await asyncio.sleep(1)
+    
+@bot.command(pass_context=True)
+async def TEST_COMMAND_set_rolls(ctx, *arg):
+    with engine.connect() as conn:
+        conn.execute(text(f'UPDATE user SET rolls_amount = {arg[0]} WHERE discord_id = {ctx.author.id}'))
+        conn.commit()
+        await ctx.reply(f'Set {arg[0]} rolls for user {ctx.author.id}')
+    
+# @bot.command()
+# async def dump(ctx, *arg):
+#     init_db.dump()
+#     await ctx.reply('dumped')
     
 @bot.command(pass_context=True)
 async def link(ctx, *arg):
@@ -102,7 +130,7 @@ async def link(ctx, *arg):
 @bot.command()
 async def osu(ctx, *arg):
     '''
-    Best alias for pr
+    Best alias for pr(ctx, *arg)
     '''
     await pr(ctx, *arg)
 
@@ -111,11 +139,21 @@ async def pr(ctx, *arg):
     '''
     Displays profile with all the information about osu and osu!quest profiles
     '''
-    print(osu_api.user("reestick").id)
+    with engine.connect() as conn:
+        info = ()
+        for i in conn.execute(text(f'SELECT * FROM user WHERE discord_id = {ctx.author.id}')):
+            info = i
+        if not info:
+            await ctx.reply('Link your account first! Command: `=link <osu name/id>`')
+            return
+        await ctx.reply(f'''
+osu id: {info[1]}
+rolls remain: {info[2]}
+rolls done: {info[3]}
+                        ''')
 
-@bot.command()
-async def rs(ctx, *arg):
-    print(osu_api)
-
+# @bot.command()
+# async def rs(ctx, *arg):
+#     print(osu_api)
 
 bot.run(config['token'])
