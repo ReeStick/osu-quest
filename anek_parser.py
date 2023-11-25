@@ -13,9 +13,7 @@ def get_random_aneks():
     soup = BeautifulSoup(r.text, 'html.parser')
 
     anecdot = soup.find_all('div', class_="text")
-    # print(type(anecdot[0]))
-    anecdot = [re.sub('<.*?>', '', '``' + str(article).replace('<br/>', '\n') + '``') for article in anecdot]
-    # print(anecdot)
+    anecdot = [re.sub('<.*?>', '', '```' + str(article).replace('<br/>', '\n') + '```') for article in anecdot]
     return anecdot
 
 get_random_aneks()

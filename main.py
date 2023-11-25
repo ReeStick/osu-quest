@@ -3,7 +3,6 @@ from discord.ext import commands
 import json
 import random
 from ossapi import Ossapi
-import sqlalchemy
 from sqlalchemy import text
 import init_db
 from anek_parser import get_random_aneks
@@ -28,18 +27,17 @@ bot = commands.Bot(command_prefix=config['prefix'],intents=intents)
 
 def gacha_rolls(discord_id, roll_count=1) -> list[str]:
     message = ''
-    print('negr')
     global anekdotes
     with engine.connect() as conn:
-        rolls =[]
+        rolls = []
         rolls_done = []
         for i in conn.execute(text(f'SELECT rolls_amount, rolls_done FROM user WHERE discord_id = {discord_id}')):
             rolls = i[0]
             rolls_done = i[1]
         if not rolls:
-            return 'Link your account first! Command: `=link <osu name/id>`'
+            return ['Link your account first! Command: `=link <osu name/id>`']
         if rolls < roll_count:
-            return f'Not enough rolls on account. Current amount: {rolls}'
+            return [f'Not enough rolls on account. Current amount: {rolls}']
         else:
             conn.execute(text(f'UPDATE user SET rolls_amount = {rolls - roll_count}, rolls_done = {rolls_done + roll_count} WHERE discord_id = {discord_id}'))
             conn.commit()
@@ -69,6 +67,7 @@ def gacha_rolls(discord_id, roll_count=1) -> list[str]:
                     rewards_list.append(rewards)
                     rewards = ''
                 rewards += '\n' + reward
+                break
     rewards_list.append(rewards)
     print(rewards_list)
     return rewards_list
@@ -93,16 +92,16 @@ async def roll_10(ctx, *arg):
             await asyncio.sleep(1)
     
 @bot.command(pass_context=True)
-async def TEST_COMMAND_set_rolls(ctx, *arg):
+async def TEST_COMMAND_add_rolls(ctx, *arg):
     with engine.connect() as conn:
         conn.execute(text(f'UPDATE user SET rolls_amount = {arg[0]} WHERE discord_id = {ctx.author.id}'))
         conn.commit()
         await ctx.reply(f'Set {arg[0]} rolls for user {ctx.author.id}')
     
-# @bot.command()
-# async def dump(ctx, *arg):
-#     init_db.dump()
-#     await ctx.reply('dumped')
+@bot.command()
+async def dump(ctx, *arg):
+    init_db.dump()
+    await ctx.reply('dumped')
     
 @bot.command(pass_context=True)
 async def link(ctx, *arg):
@@ -123,7 +122,7 @@ async def link(ctx, *arg):
             conn.commit()
             await ctx.reply(f"Succesfully linked {arg[0]} profile")
         else:
-            conn.execute(text(f'UPDATE user SET osu_id = {user} WHERE discord_id = {ctx.author.id}'))
+            conn.execute(text(f'UPDATE user SET osu_id = {user} WHERE discord_id = {discord_id}'))
             conn.commit()
             await ctx.reply(f"Succesfully re-linked with {arg[0]} profile")
     
@@ -152,8 +151,12 @@ rolls remain: {info[2]}
 rolls done: {info[3]}
                         ''')
 
-# @bot.command()
-# async def rs(ctx, *arg):
-#     print(osu_api)
+@bot.command()
+async def add_count_task(ctx, *arg):
+    await ctx.reply(add_count_task(arg[0], arg[1]))
+
+@bot.command()
+async def rs(ctx, *arg):
+    print(osu_api)
 
 bot.run(config['token'])
